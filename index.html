@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>做了个 Codex 额度重置监控</title>
+<meta name="description" content=" 个人工程笔记。记录我们如何基于 @thsottiaux 的公开推文，整理 Codex / ChatGPT 额度重置事件，并在 Cloudflare Workers 上挂一个可对照的日历页。数据非官方、不接 OpenAI 私有 API；文中链接仅作对照，不当购买入口。撰写时（2026-10-25）仓库与线上页一致。 一">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700&family=Noto+Serif+SC:wght@500;700&display=swap" rel="stylesheet">
+<style>
+
+  :root {
+    --bg: #f7f5f0;
+    --card: #ffffff;
+    --text: #1a1a1a;
+    --muted: #5c5c5c;
+    --accent: #1a73e8;
+    --border: #e6e2d8;
+    --code-bg: #f0eee8;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: "Noto Sans SC", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+    font-size: 17px;
+    line-height: 1.85;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap {
+    max-width: 760px;
+    margin: 0 auto;
+    padding: 2.5rem 1.25rem 4rem;
+  }
+  article {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 2rem 1.75rem 2.5rem;
+    box-shadow: 0 8px 30px rgba(0,0,0,0.04);
+  }
+  h1 {
+    font-family: "Noto Serif SC", "Noto Sans SC", serif;
+    font-size: clamp(1.55rem, 4vw, 2rem);
+    line-height: 1.4;
+    margin: 0 0 1.25rem;
+    font-weight: 700;
+  }
+  h2 {
+    font-family: "Noto Serif SC", "Noto Sans SC", serif;
+    font-size: 1.35rem;
+    margin: 2.25rem 0 0.9rem;
+    padding-top: 0.5rem;
+    border-top: 1px solid var(--border);
+    font-weight: 700;
+  }
+  h2:first-of-type { border-top: none; padding-top: 0; }
+  h3 { font-size: 1.1rem; margin: 1.5rem 0 0.6rem; }
+  p { margin: 0.9rem 0; }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  ul, ol { padding-left: 1.35rem; margin: 0.8rem 0; }
+  li { margin: 0.35rem 0; }
+  strong { font-weight: 700; }
+  img {
+    display: block;
+    max-width: 100%;
+    height: auto;
+    margin: 1.1rem auto 0.35rem;
+    border-radius: 10px;
+    border: 1px solid var(--border);
+    background: #fafafa;
+  }
+  .caption {
+    text-align: center;
+    color: var(--muted);
+    font-size: 0.92rem;
+    margin-top: 0.2rem;
+    margin-bottom: 1.2rem;
+  }
+  pre {
+    background: var(--code-bg);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 1rem 1.1rem;
+    overflow-x: auto;
+    font-size: 0.88rem;
+    line-height: 1.55;
+  }
+  code {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 0.9em;
+    background: var(--code-bg);
+    padding: 0.1em 0.35em;
+    border-radius: 4px;
+  }
+  pre code { background: none; padding: 0; }
+  blockquote {
+    margin: 1rem 0;
+    padding: 0.2rem 0 0.2rem 1rem;
+    border-left: 3px solid var(--accent);
+    color: var(--muted);
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 1rem 0;
+    font-size: 0.95rem;
+  }
+  th, td {
+    border: 1px solid var(--border);
+    padding: 0.55rem 0.7rem;
+    text-align: left;
+    vertical-align: top;
+  }
+  th { background: #f3f1eb; }
+  .meta {
+    color: var(--muted);
+    font-size: 0.92rem;
+    margin-bottom: 1.5rem;
+  }
+  .pages-banner {
+    margin: 0 0 1.25rem;
+    padding: 0.75rem 1rem;
+    background: #eef5ff;
+    border: 1px solid #d0e2ff;
+    border-radius: 10px;
+    font-size: 0.95rem;
+  }
+  footer {
+    margin-top: 2rem;
+    padding-top: 1rem;
+    border-top: 1px solid var(--border);
+    color: var(--muted);
+    font-size: 0.88rem;
+  }
+
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <article>
+      <div class="pages-banner">在线阅读（GitHub Pages）：<a href="https://maynor996.github.io/codex-reset-monitor/">https://maynor996.github.io/codex-reset-monitor/</a></div>
+      <h1>做了个 Codex 额度重置监控</h1>
+      <div class="meta">原文：<a href="https://blog.csdn.net/xianyu120/article/details/169069303">https://blog.csdn.net/xianyu120/article/details/169069303</a></div>
+      <blockquote>
+<p>个人工程笔记。记录我们如何基于 @thsottiaux 的公开推文，整理 Codex / ChatGPT 额度重置事件，并在 Cloudflare Workers 上挂一个可对照的日历页。数据非官方、不接 OpenAI 私有 API；文中链接仅作对照，不当购买入口。撰写时（2026-10-25）仓库与线上页一致。</p>
+</blockquote>
+<h2>一、引子：额度何时重置，大家常盯 @thsottiaux</h2>
+<p>用 Codex 写代码时，额度用尽是常态。官方仪表盘能看到「还剩多少」，却很难说清「下一次全员重置大概落在哪一天」。社区里大家习惯去刷 <strong>Tibo（@thsottiaux）</strong> 的公开帖——他常会发「Day N / Reset」「all propagated」「It's done」一类信号。</p>
+<p>问题是：推文时间线散、时区绕（常见 PST / UTC 表述，国内习惯对照北京时间）、有时先宣布再确认，人工刷容易漏。我们想要的是：</p>
+<ol>
+<li>把确认过的重置事件落成结构化数据；</li>
+<li>用很朴素的启发式估一个「下次窗口」；</li>
+<li>页面上能一眼看到日历、最近确认帖，以及「刚重置不久 / 接近均值」的状态。</li>
+</ol>
+<p>于是在 <strong>codex中文网</strong>（主站安装/指南类内容）旁边，加了一条独立路径：<code>/zh/codex-reset/</code>。目标不是做第二个状态中心，而是把「盯梢公开信号」这件事工程化一点。</p>
+<p><img alt="重置监控页" src="imgs/01.png" /><br />
+<em>图 1：重置监控页——最近确认、启发式预测、十月日历与公开帖流</em></p>
+<h2>二、做了什么：监控页长什么样</h2>
+<p>页面职责很窄，刻意不做「官方状态页」包装：</p>
+<ul>
+<li><strong>最近一次确认</strong>：显示距今多久、北京时间戳、是否全员重置，并链回确认帖；</li>
+<li><strong>启发式预测（未来 24h）</strong>：基于历史确认间隔的均值，估一个窗口与粗概率；</li>
+<li><strong>月历</strong>：把 <code>confirmed</code> 事件标在日期上，可翻月；</li>
+<li><strong>公开帖流</strong>：同一天内 announce / follow-up 按时间展开，可跳到 X 原文；</li>
+<li><strong>页脚声明</strong>：基于 @thsottiaux 公开推文整理；<strong>非官方</strong>，不代表 OpenAI。</li>
+</ul>
+<p>以撰写当天为例：最新一条是 <strong>Day 20 / Rest and reset</strong>。约 <code>2026-10-25T03:39Z</code> 宣布（含「By midnight PST」跟帖），<code>2026-10-25T06:06:16Z</code>（推文 <code>2114237083652882932</code>）确认已 propagated。再往前还有 Day 18、Day 17、Day 15、Day 13 等，都写在同一份事件表里。</p>
+<p>预测侧当前均值大约 <strong>68 小时</strong>量级（随样本变化），刚重置后「未来 24h 内再重置」的启发式概率会压得很低——这符合直觉，也提醒：<strong>数字只是统计投影，不是承诺。</strong> 页面上的「预测窗口」通常取「上次确认 + 均值」附近一段（略提前几小时、略延后几小时），方便对照，而不是精确到分钟的闹钟。</p>
+<h2>三、数据怎么来：events.json，而不是 Worker 里调 X</h2>
+<p>事件源是仓库里的 <code>data/events.json</code>，构建时内嵌进静态 HTML。大致形状：</p>
+<pre><code class="language-json">{
+  &quot;updatedAt&quot;: &quot;2026-10-25T08:40:00+08:00&quot;,
+  &quot;sourceNote&quot;: &quot;基于 @thsottiaux 公开推文整理；非官方，不代表 OpenAI。&quot;,
+  &quot;resets&quot;: [
+    {
+      &quot;id&quot;: &quot;2114237083652882932&quot;,
+      &quot;confirmedAt&quot;: &quot;2026-10-25T06:06:16Z&quot;,
+      &quot;announcedAt&quot;: &quot;2026-10-25T03:39:31Z&quot;,
+      &quot;label&quot;: &quot;Day 20 / Rest and reset&quot;,
+      &quot;status&quot;: &quot;confirmed&quot;,
+      &quot;scope&quot;: &quot;global&quot;,
+      &quot;posts&quot;: [
+        { &quot;id&quot;: &quot;...&quot;, &quot;at&quot;: &quot;...&quot;, &quot;text&quot;: &quot;...&quot;, &quot;url&quot;: &quot;https://x.com/thsottiaux/status/...&quot; }
+      ]
+    }
+  ]
+}
+</code></pre>
+<p>字段约定（实践中摸出来的）：</p>
+<ul>
+<li><code>announcedAt</code>：第一次明确宣布的帖时间；</li>
+<li><code>confirmedAt</code>：propagated / done 类确认帖时间；没有单独确认帖时，可与宣布时间相同；</li>
+<li><code>id</code>：优先用确认帖 id，便于去重与外链；</li>
+<li><code>posts[]</code>：同一轮重置的相关公开帖原文摘要与 URL。</li>
+</ul>
+<p>同步流水线刻意放在 <strong>Grok Bot 定时例程</strong>（约每 4 小时），而不是 Cloudflare Worker cron：</p>
+<ol>
+<li>用公开 X 读取拉 @thsottiaux 近期帖；</li>
+<li>只收录明确带 reset / propagated / Day N + reset 等信号的帖，不臆造，忽略无关回复与转推；</li>
+<li>合并 announce + 确认帖到同一 <code>resets[]</code> 条目；</li>
+<li><code>python3 scripts/build_page.py</code> 重生成 <code>public/**/index.html</code>；</li>
+<li><code>npm run deploy</code> 推到 Worker <code>codexinstall-gateway</code>；</li>
+<li>若无新增/变更，静默跳过，避免空部署刷屏。</li>
+</ol>
+<p><strong>为什么不把 X token 塞进 Worker？</strong> 这页只需要公开信息；Worker 侧也不该为「刷时间线」持有 bearer。例程改 JSON → 构建 → 部署，边界更干净：密钥不进边缘、静态页可回滚、离线打开仍能看到内嵌的最近一批事件。</p>
+<p>前端启发式也很直白：对已确认时间排序，算相邻间隔均值；窗口取「上次 + 均值」附近一段；「未来 24h 概率」用「已过时间 / 均值」做一个偏 logistic 的映射。样本不足时默认均值回退约 48h。代码就在页面内联脚本里，方便对照，也方便以后换成更稳的模型而不改数据层。</p>
+<h2>四、工程坑：TanStack Start 水合会清掉 SSR 注入</h2>
+<p>主站本体是 <strong>TanStack Start（React）</strong>，部署在原 Worker <code>codexinstall</code>。我们另起 Gateway Worker <code>codexinstall-gateway</code>：</p>
+<ul>
+<li><code>/zh/codex-reset</code>、<code>/codex-reset</code> 由 Gateway 自己的 ASSETS 托管；</li>
+<li>其余流量 <strong>service binding</strong> 到 <code>codexinstall</code>；</li>
+<li>仅对首页等少数 HTML 路径做注入（避免污染文档子页）。</li>
+</ul>
+<p>最初用 <code>HTMLRewriter</code> 往 <code>nav[aria-label="主导航"]</code>、hero <code>.cd-actions</code>、<code>body</code> 里塞「重置监控」链接和右侧固定侧栏 <code>#gw-side-rail</code>。SSR HTML 看起来没问题，但 React 水合一跑，<strong>不在虚拟 DOM 里的节点会被拆掉</strong>——注入「闪一下又没了」。这是边缘注入遇上 CSR/水合框架的经典坑：Rewriter 改的是响应字节流，框架认的是自己的树。</p>
+<p>解决办法是双保险：</p>
+<ol>
+<li><strong>SSR 注入仍保留</strong>：首屏与无 JS 场景能看到；</li>
+<li><strong>client bootstrap</strong>：在 <code>body</code> 末尾再塞一段带 <code>data-gw</code> 标记的脚本，在 <code>DOMContentLoaded</code> / <code>load</code>、若干延迟、<code>MutationObserver</code>、甚至低频 <code>setInterval</code> 上幂等重挂节点（用 <code>data-gw="gw-reset"</code> 等选择器判重）。</li>
+</ol>
+<p>侧栏本身是右侧固定竖向胶囊：<code>position: fixed; writing-mode: vertical-rl</code>，移动端主站导航常被隐藏，侧栏成了稳定入口。样式与节点都带 <code>data-gw</code>，重复注入时先查再挂，避免 Gateway 多层代理时叠两份。</p>
+<p><img alt="首页注入与右侧侧栏" src="imgs/02.png" /><br />
+<em>图 2：首页导航 / hero 按钮与右侧固定侧栏中的「重置监控」入口（Gateway 注入）</em></p>
+<p><img alt="站点图标" src="imgs/03.png" /><br />
+<em>图 3：codex中文网图标（目录投稿可用）</em></p>
+<h2>五、自己怎么对照</h2>
+<p>需要看日历或最近确认帖时，直接打开：</p>
+<p><a href="https://codexinstall.asia/zh/codex-reset/">https://codexinstall.asia/zh/codex-reset/</a></p>
+<p>主站仍是安装与指南向内容；若从首页侧栏看到「充值」外链，那是另一条业务入口，与本文监控逻辑无关，这里不展开。</p>
+<h2>六、免责与边界</h2>
+<ol>
+<li><strong>预测仅供参考</strong>：均值间隔会随样本漂移，官方节奏也可能突变；</li>
+<li><strong>不抓私有 API / 账号额度接口</strong>，只整理公开推文；</li>
+<li><strong>非 OpenAI 官方页面</strong>，页面上的 <code>sourceNote</code> 已写明；</li>
+<li>推文措辞有时暧昧（玩笑、延期、局部范围），同步规则宁可漏、不要瞎补。</li>
+</ol>
+<h2>七、小结</h2>
+<p>这是一次很「窄」的工程实践：<strong>公开信号 → 结构化事件 → 静态内嵌页 → Gateway 挂载与水合友好的导航注入</strong>。没有神秘黑盒，也没有官方背书。若你也在盯 Codex 额度节奏，可以把该页当对照板；若自己搭类似「社区公开时间线 → 日历」小工具，Workers + 站外例程同步 + <code>data-*</code> 幂等重挂，是我们踩坑后比较稳的组合。</p>
+<p><em>（个人实践分享，非官方内容；事件与预测以页面实时数据为准。）</em></p>
+      <footer>镜像自 CSDN @xianyu120 · 内容以原文为准</footer>
+    </article>
+  </div>
+</body>
+</html>
